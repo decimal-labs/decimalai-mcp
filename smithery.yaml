@@ -1,0 +1,16 @@
+# Smithery configuration — verify current schema at https://smithery.ai/docs before submitting.
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      decimalApiKey:
+        type: string
+        description: Optional DecimalAI API key (dai_sk_...). All tools work anonymously.
+    required: []
+  commandFunction: |-
+    (config) => ({
+      command: "decimalai-mcp",
+      args: [],
+      env: config.decimalApiKey ? { DECIMAL_API_KEY: config.decimalApiKey } : {}
+    })

@@ -1,0 +1,92 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "decimalai-mcp"
+version = "0.1.1"
+description = "MCP server for the DecimalAI skills registry — search skills, inspect trust/benchmark evidence, and read the leaderboard from any MCP client."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [{name = "Decimal AI"}]
+keywords = ["mcp", "model-context-protocol", "agents", "skills", "decimalai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    # Official MCP Python SDK. Written against the FastMCP interface
+    # (`mcp.server.fastmcp.FastMCP`), stable since mcp 1.2.0.
+    #
+    # The `<2` cap is LOAD-BEARING, not precautionary — verified 2026-07-31:
+    # mcp 2.0.0 REMOVED the module outright. Under mcp 2.0.0,
+    # `from mcp.server.fastmcp import FastMCP` raises
+    # ModuleNotFoundError: No module named 'mcp.server.fastmcp',
+    # and decimalai_mcp.server fails at import. Do not widen this cap without
+    # porting server.py to the 2.x server API first.
+    "mcp>=1.2.0,<2",
+    # Same floor as decimalai-python: 0.28.1 is the modern
+    # httpx line; MockTransport + BaseTransport used by the tests exist
+    # well before it, so the floor is driven by co-installability.
+    "httpx>=0.28.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
+
+[project.scripts]
+decimalai-mcp = "decimalai_mcp.server:main"
+
+[project.urls]
+Homepage = "https://github.com/decimal-labs/decimalai-mcp"
+Documentation = "https://docs.decimal.ai"
+Repository = "https://github.com/decimal-labs/decimalai-mcp"
+
+[tool.hatch.build.targets.wheel]
+packages = ["decimalai_mcp"]
+
+# DO NOT DELETE — this section is the whole reason the sdist is not a repo dump.
+# Without it hatchling sweeps in EVERY file git does not ignore: maintainer docs,
+# .github/ CI plumbing, release notes, whatever else is sitting in the tree. None of
+# that helps anyone building from source, nobody notices it in a tarball, and it
+# comes back on every single `python -m build` unless this list is here.
+# The list below is an ALLOW-list — anything new (a lockfile, a scratch doc) is
+# excluded until it is named here on purpose.
+#   decimalai_mcp/ — the package itself.
+#   tests/         — deliberately kept: downstream packagers (distros, conda-forge)
+#                    build from the sdist and expect to run the suite. The suite is
+#                    fully offline (httpx.MockTransport), so it actually runs there.
+#   README.md      — carries the load-bearing `mcp-name:` marker the MCP registry
+#                    reads off the PUBLISHED package to verify PyPI ownership.
+#   LICENSE        — the MIT text, so a source redistribution carries its own terms.
+# Only the first two entries are load-bearing. Verified 2026-08-10 by building with
+# them removed: hatchling force-adds README.md (the `readme` target), LICENSE (it
+# detects license files), pyproject.toml, PKG-INFO and .gitignore no matter what the
+# include list says. README.md and LICENSE are named anyway so the intent survives a
+# change to `readme`/`license` metadata — they are belt-and-braces, not the mechanism.
+[tool.hatch.build.targets.sdist]
+include = [
+    "/decimalai_mcp",
+    "/tests",
+    "/README.md",
+    "/LICENSE",
+]
+# On `.gitignore` specifically: it cannot be removed. Hatchling force-adds it so
+# the sdist can reproduce its own file selection, and an `exclude` entry does not
+# override that — verified 2026-08-10 with both `"/.gitignore"` and `".gitignore"`.
+# It is six lines of build input rather than anything maintainer-facing, so leave it be.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
