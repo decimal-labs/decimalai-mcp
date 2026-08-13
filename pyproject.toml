@@ -44,6 +44,10 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
+    # Test-only: tests/test_smithery_config.py parses the published smithery.yaml
+    # listing. Dev-only on purpose — the server itself reads no YAML, and the
+    # test skips (importorskip) where PyYAML is absent, e.g. an sdist rebuild.
+    "pyyaml>=6.0",
 ]
 
 [project.scripts]

@@ -1,4 +1,4 @@
-# Smithery configuration — verify current schema at https://smithery.ai/docs before submitting.
+# Smithery configuration.
 startCommand:
   type: stdio
   configSchema:
@@ -8,9 +8,13 @@ startCommand:
         type: string
         description: Optional DecimalAI API key (dai_sk_...). All tools work anonymously.
     required: []
+  # `uvx decimalai-mcp` — the same invocation the README documents for Claude
+  # Code and Claude Desktop. A bare `decimalai-mcp` command would require the
+  # console script to already be on PATH in Smithery's runtime; uvx fetches and
+  # runs the published package without a global install.
   commandFunction: |-
     (config) => ({
-      command: "decimalai-mcp",
-      args: [],
+      command: "uvx",
+      args: ["decimalai-mcp"],
       env: config.decimalApiKey ? { DECIMAL_API_KEY: config.decimalApiKey } : {}
     })
