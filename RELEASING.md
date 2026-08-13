@@ -43,7 +43,7 @@ The version lives in **several places that must match**:
 | `version` | `pyproject.toml` | CI — asserted against the release tag |
 | `__version__` | `decimalai_mcp/__init__.py` | by hand |
 | `User-Agent` string | `decimalai_mcp/api.py` | by hand |
-| `version` and `packages[0].version` | `server.json` **and** `server.io-github.json` | by hand |
+| `version` and `packages[0].version` | `server.json` | by hand |
 
 Bump **all** of them to the same SemVer string. Only the `pyproject.toml` value is machine-checked, so
 the others are the ones that drift — the `server.json` pair in particular, because it is read at MCP
@@ -58,7 +58,7 @@ table above):
 
 ```bash
 V=$(python -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
-git grep -nF "$V" -- decimalai_mcp/__init__.py decimalai_mcp/api.py server.json server.io-github.json
+git grep -nF "$V" -- decimalai_mcp/__init__.py decimalai_mcp/api.py server.json
 ```
 
 ## Release steps
@@ -68,7 +68,7 @@ git grep -nF "$V" -- decimalai_mcp/__init__.py decimalai_mcp/api.py server.json 
 #    pyproject.toml:            version = "0.2.0"
 #    decimalai_mcp/__init__.py: __version__ = "0.2.0"
 #    decimalai_mcp/api.py:      User-Agent "decimalai-mcp/0.2.0"
-#    server.json + server.io-github.json: "version" AND packages[0].version
+#    server.json: "version" AND packages[0].version
 #    Then re-run the six-hit grep above.
 
 # 2. Tests green locally, on the pinned mcp.

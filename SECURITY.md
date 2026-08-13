@@ -39,7 +39,7 @@ public registry endpoints, plus optional per-org enrichment when `DECIMAL_API_KE
 - **Protocol handling.** Malformed or hostile MCP messages, or malformed API responses, that cause
   the server to crash, hang, or emit something outside its schema.
 - **The published artifacts** — the `decimalai-mcp` wheel and sdist on PyPI, the `uvx decimalai-mcp`
-  path, and the registry listings in `server.json` / `server.io-github.json` / `smithery.yaml` /
+  path, and the registry listings in `server.json` / `smithery.yaml` /
   `glama.json`. A published package that does not match this source tree, a listing that points at
   the wrong artifact, or a typosquat impersonating either name is in scope. Report those here even
   though the fix is not a code change.
