@@ -265,6 +265,6 @@ def get_leaderboard(
     # and a number hardcoded in a shipped PyPI package cannot be corrected without a
     # release — meanwhile every MCP client reads this line into the model's context as
     # fact. Name the axis, link the rules.
-    lines += ["", "Every axis is an earned place. The per-axis gates are documented at "
-              "https://docs.decimal.ai/guides/skillscore."]
+    lines += ["", "Every axis is an earned place. How the axes rank and what evidence "
+              "they need: https://docs.decimal.ai/guides/registry#how-effectiveness-is-computed."]
     return "\n".join(lines)

@@ -13,7 +13,7 @@ package, or a registry listing; say which if you know.
 Two ways to reach us, either is fine:
 
 - **GitHub private vulnerability reporting** — **Security → Report a vulnerability** on this
-  repository. That opens a private advisory only maintainers can see.
+  repository. That report stays private to the maintainers.
 - **Email** — [hello@decimal.ai](mailto:hello@decimal.ai). A PGP key is available on request if you
   would rather not send details in cleartext.
 
@@ -68,8 +68,10 @@ actually do:
 - We follow coordinated disclosure. We agree a timeline with you rather than impose one, and we will
   not ask you to stay quiet indefinitely. A fix here means a PyPI release plus updated registry
   listings, and we will tell you when both have landed.
-- We are happy to credit you in the advisory and the release notes. Tell us how you would like to be
-  named, or say that you would rather not be.
+- We do not publish security advisories, so please do not wait on one before writing up your own
+  account. The fix and its release notes are the public record.
+- We are happy to credit you in those release notes. Tell us how you would like to be named, or say
+  that you would rather not be.
 
 There is no paid bug bounty. That is a resourcing decision, not a judgment about the value of your
 work.
