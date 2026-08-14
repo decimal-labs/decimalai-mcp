@@ -46,7 +46,7 @@ def _base_url() -> str:
 def _headers() -> dict[str, str]:
     # Keep in step with __version__ / pyproject.toml on every release —
     # see the version table in RELEASING.md.
-    headers = {"User-Agent": "decimalai-mcp/0.1.1"}
+    headers = {"User-Agent": "decimalai-mcp/0.1.2"}
     api_key = os.environ.get("DECIMAL_API_KEY")
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"

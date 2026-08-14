@@ -52,9 +52,10 @@ an older release than the one you just shipped. (That is not hypothetical: at 0.
 files and the `api.py` User-Agent were still on 0.1.0.)
 
 Check the whole set in one shot. Take the version from `pyproject.toml` (the one CI asserts) and
-require **six** hits in the hand-maintained sites — `__init__.py` 1, `api.py` 1, and 2 in each
-`server*.json`. A count other than six means a site drifted or a new one appeared (add it to the
-table above):
+require **four** hits in the hand-maintained sites — `__init__.py` 1, `api.py` 1, and 2 in
+`server.json`. A count other than four means a site drifted or a new one appeared (add it to the
+table above). *(This was six while a second `server.io-github.json` existed; that file was removed
+when the server moved to a single MCP namespace, taking two hits with it.)*
 
 ```bash
 V=$(python -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")

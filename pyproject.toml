@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "decimalai-mcp"
-version = "0.1.1"
+version = "0.1.2"
 description = "MCP server for the DecimalAI skills registry — search skills, inspect trust/benchmark evidence, and read the leaderboard from any MCP client."
 readme = "README.md"
 license = {text = "MIT"}
