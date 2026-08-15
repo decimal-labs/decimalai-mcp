@@ -95,6 +95,11 @@ LEADERBOARD_RESPONSE = {
 }
 
 
+def _boom() -> None:
+    """Stand-in for `mcp.run` — fails loudly if a flag path ever serves."""
+    raise AssertionError("mcp.run() must not be called for a flag invocation")
+
+
 @pytest.fixture
 def capture(monkeypatch):
     """Install a MockTransport; captured[0] is the last request seen."""
@@ -158,6 +163,31 @@ class TestSearchSkills:
         out = api.search_skills("no-such-thing")
         assert "No public skills matched" in out
 
+    def test_namespaced_result_surfaces_the_slug_get_skill_takes(self, capture):
+        """A namespaced `name` is NOT a usable get_skill argument.
+
+        The detail endpoint is a single URL path segment, so `owner/skill` 404s
+        there (verified live 2026-08-15). `url_slug` is the slash-free identifier
+        minted for it — the row has to carry it or the model cannot reach the
+        record it just found.
+        """
+        capture(dict(BROWSE_RESPONSE, items=[
+            dict(BROWSE_RESPONSE["items"][0],
+                 name="owner/semantic-search", url_slug="owner-semantic-search"),
+        ]))
+        out = api.search_skills("x")
+        assert "**owner/semantic-search**" in out       # identity still shown
+        assert "get_skill slug: `owner-semantic-search`" in out
+        assert "get_skill(<url_slug>)" in out           # footer points at the slug
+
+    def test_plain_name_row_stays_short(self, capture):
+        """When url_slug == name there is nothing to disambiguate — no extra field."""
+        capture(dict(BROWSE_RESPONSE, items=[
+            dict(BROWSE_RESPONSE["items"][0], url_slug="semantic-search"),
+        ]))
+        out = api.search_skills("x")
+        assert "get_skill slug:" not in out
+
 
 class TestGetSkill:
     def test_detail_includes_trust_and_benchmark(self, capture):
@@ -184,6 +214,31 @@ class TestGetSkill:
         capture({"detail": "Registry skill not found"}, status_code=404)
         out = api.get_skill("nope")
         assert "No public registry skill named 'nope'" in out
+        # The recovery hint must name url_slug. It used to say "the slug is the
+        # `name` field", which is the exact advice that produces this 404 for any
+        # namespaced skill.
+        assert "url_slug" in out
+        assert "the slug is the `name` field" not in out
+
+    def test_web_page_link_uses_url_slug_not_the_namespaced_name(self, capture):
+        """The detail footer must link /skills/<url_slug>.
+
+        A registry name may be namespaced (`owner/skill`). Interpolated into the
+        web route it renders an extra path segment and 404s — verified live
+        2026-08-15: /skills/wshobson/python-error-handling -> 404, while
+        /skills/wshobson-python-error-handling -> 200.
+        """
+        capture(dict(DETAIL_RESPONSE, name="owner/semantic-search",
+                     url_slug="owner-semantic-search"))
+        out = api.get_skill("owner-semantic-search")
+        assert "app.decimal.ai/skills/owner-semantic-search" in out
+        assert "app.decimal.ai/skills/owner/semantic-search" not in out
+
+    def test_web_page_link_falls_back_to_name_without_url_slug(self, capture):
+        """Older backends do not send url_slug; behaviour there is unchanged."""
+        capture(DETAIL_RESPONSE)  # no url_slug key
+        out = api.get_skill("semantic-search")
+        assert "app.decimal.ai/skills/semantic-search" in out
 
     def test_long_body_truncated(self, capture):
         detail = dict(DETAIL_RESPONSE, body_markdown="x" * 10000)
@@ -249,3 +304,60 @@ class TestServerModule:
         reported = server._mcp_server.version
         assert reported == __version__, f"serverInfo reports {reported!r}, package is {__version__!r}"
         assert reported != md.version("mcp"), "serverInfo is echoing the mcp SDK version again"
+
+    def test_get_skill_tool_docstring_points_at_url_slug(self):
+        """The tool description is what the MODEL reads to pick an argument.
+
+        It used to say "the `name` field from search results" — which 404s for
+        every namespaced skill in the registry.
+        """
+        pytest.importorskip("mcp")
+        from decimalai_mcp import server as srv
+
+        doc = srv.get_skill.__doc__ or ""
+        assert "url_slug" in doc
+        assert "the `name` field from search results" not in doc
+
+
+class TestMainArgv:
+    """`decimalai-mcp --help` used to start a stdio server and exit 0, silently."""
+
+    def test_help_prints_usage_and_does_not_start_the_server(self, capsys, monkeypatch):
+        pytest.importorskip("mcp")
+        from decimalai_mcp import server as srv
+
+        monkeypatch.setattr(srv.mcp, "run", _boom)
+        for flag in ("-h", "--help"):
+            srv.main([flag])
+            out = capsys.readouterr().out
+            assert "stdio" in out
+            assert "DECIMAL_API_KEY" in out
+            assert "claude mcp add decimalai -- uvx decimalai-mcp" in out
+
+    def test_version_flag_prints_the_package_version(self, capsys, monkeypatch):
+        pytest.importorskip("mcp")
+        from decimalai_mcp import __version__, server as srv
+
+        monkeypatch.setattr(srv.mcp, "run", _boom)
+        srv.main(["--version"])
+        assert capsys.readouterr().out.strip() == f"decimalai-mcp {__version__}"
+
+    def test_unknown_argument_exits_2_without_serving(self, capsys, monkeypatch):
+        pytest.importorskip("mcp")
+        from decimalai_mcp import server as srv
+
+        monkeypatch.setattr(srv.mcp, "run", _boom)
+        with pytest.raises(SystemExit) as exc:
+            srv.main(["--nope"])
+        assert exc.value.code == 2
+        assert "unrecognized argument" in capsys.readouterr().err
+
+    def test_no_arguments_still_serves_over_stdio(self, monkeypatch):
+        """The default path is the whole product — it must be untouched."""
+        pytest.importorskip("mcp")
+        from decimalai_mcp import server as srv
+
+        calls: list[int] = []
+        monkeypatch.setattr(srv.mcp, "run", lambda: calls.append(1))
+        srv.main([])
+        assert calls == [1]

@@ -102,6 +102,15 @@ def _skill_line(item: dict[str, Any], rank: Optional[int] = None) -> str:
     if desc:
         parts.append(desc if len(desc) <= 140 else desc[:137] + "...")
     meta = []
+    # The identifier get_skill() actually takes. A registry `name` may be
+    # namespaced (`owner/skill`) and the detail endpoint is a single path
+    # segment, so the namespaced form 404s there — `url_slug` is the slash-free
+    # identifier minted for it. Surface it whenever it differs from the name,
+    # otherwise the model has no way to reach the record it just found. Omitted
+    # when the two are identical (the plain-name case) so the common row stays short.
+    slug = item.get("url_slug")
+    if slug and slug != name:
+        meta.append(f"get_skill slug: `{slug}`")
     metric = item.get("metric") or {}
     if metric.get("label"):
         # Leaderboard rows carry a headline metric ("+12 pts pass rate", …)
@@ -150,7 +159,8 @@ def search_skills(
     total = data.get("total_hint") or data.get("total") or len(items)
     lines = [f"## Registry results for {query!r} ({len(items)} of {total})", ""]
     lines += [_skill_line(item) for item in items]
-    lines += ["", "Use `get_skill(<name>)` for trust/scan status, benchmark evidence, and the skill body."]
+    lines += ["", "Use `get_skill(<url_slug>)` for trust/scan status, benchmark evidence, and the "
+              "skill body — the slug shown above where it differs from the name, otherwise the name itself."]
     return "\n".join(lines)
 
 
@@ -165,7 +175,9 @@ def get_skill(slug: str) -> str:
         if exc.response.status_code == 404:
             return (
                 f"No public registry skill named {slug!r}. "
-                "Try search_skills() first — the slug is the `name` field."
+                "Try search_skills() first and pass the `url_slug` field, not `name` — "
+                "a namespaced name (`owner/skill`) cannot be a single URL path segment, "
+                "so it always 404s here; the slug is its slash-free form (`owner-skill`)."
             )
         raise
 
@@ -217,7 +229,12 @@ def get_skill(slug: str) -> str:
         truncated = body if len(body) <= 4000 else body[:4000] + "\n\n… [truncated]"
         lines += ["", "## SKILL.md body", "", truncated]
 
-    lines += ["", f"Web page: https://app.decimal.ai/skills/{skill.get('name', slug)}"]
+    # /skills/<url_slug>, not /skills/<name>: the web route is one path segment too,
+    # so a namespaced name renders an extra segment and 404s (verified live 2026-08-15,
+    # /skills/wshobson/python-error-handling -> 404 vs the slug -> 200). Fall back to
+    # `name` for older backends that do not send url_slug, where the two are identical.
+    lines += ["", "Web page: https://app.decimal.ai/skills/"
+              f"{skill.get('url_slug') or skill.get('name') or slug}"]
     return "\n".join(lines)
 
 
