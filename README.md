@@ -1,6 +1,14 @@
 # decimalai-mcp
 
+*Part of [DecimalAI](https://decimal.ai). Most users want the Python SDK → [decimal-labs/decimalai-python](https://github.com/decimal-labs/decimalai-python).*
+
 MCP server for the [DecimalAI](https://decimal.ai) skills registry — the registry that ranks agent skills by **measured effectiveness** (verified A/B benchmarks, live pass rates, AI rater scores), not download counts.
+
+[![PyPI](https://img.shields.io/pypi/v/decimalai-mcp)](https://pypi.org/project/decimalai-mcp/)
+[![Downloads](https://static.pepy.tech/badge/decimalai-mcp/month)](https://pepy.tech/project/decimalai-mcp)
+[![CI](https://img.shields.io/github/actions/workflow/status/decimal-labs/decimalai-mcp/ci.yml?branch=main)](https://github.com/decimal-labs/decimalai-mcp/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/pypi/pyversions/decimalai-mcp)](https://pypi.org/project/decimalai-mcp/)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/decimal-labs/decimalai-mcp/blob/main/LICENSE)
 
 <!-- mcp-name: ai.decimal/registry -->
 

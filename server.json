@@ -7,13 +7,13 @@
     "url": "https://github.com/decimal-labs/decimalai-mcp",
     "source": "github"
   },
-  "version": "0.1.2",
+  "version": "0.1.3",
   "websiteUrl": "https://app.decimal.ai/skills",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "decimalai-mcp",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "transport": {
         "type": "stdio"
       },
