@@ -18,8 +18,7 @@ from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
 
-from . import api
-from . import __version__
+from . import __version__, api
 
 # Resolve FastMCP's own settings model BEFORE the first FastMCP(...) call.
 #

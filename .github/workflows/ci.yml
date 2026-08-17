@@ -40,3 +40,78 @@ jobs:
           import importlib.metadata as md
           print("OK — mcp", md.version("mcp"), "provides FastMCP; server imports clean")
           PY
+
+  lint:
+    # This repo had no lint or type job at all — the only one of the five without
+    # either. Both are clean as of 2026-08-17 (ruff: all checks passed after one
+    # import-sort fix; mypy: no issues in 3 source files), so unlike the larger
+    # repos this one starts green and can block from day one.
+    name: Lint + types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install 'ruff>=0.15,<0.16' 'mypy>=1.14,<2' -e "."
+
+      - name: Ruff
+        run: ruff check decimalai_mcp/ --select I,E,W,F --ignore E501
+
+      - name: Mypy
+        run: mypy decimalai_mcp/ --ignore-missing-imports
+
+  floors:
+    # The version floors in pyproject.toml are claims; this job is what makes them
+    # true. It installs the LOWEST version of every direct dependency and runs the
+    # suite against it. Added 2026-08-17, after the same job on decimalai-python
+    # caught a `click>=8.0` floor that was false by two minor versions.
+    # Advisory until it has been green for a week, then promote to required.
+    name: Floors resolve and pass
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install at the lowest declared versions
+        run: uv pip install --system --resolution lowest-direct ".[dev]"
+
+      - name: Show what resolved
+        run: uv pip list --system
+
+      - name: The floors are claims — run them
+        run: python -m pytest tests -q
+
+  audit:
+    # Known-advisory check against the resolved dependency set. Advisory: a new
+    # advisory lands on someone else's schedule and should not turn main red
+    # before anyone has read it.
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install package and auditor
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-audit .
+
+      - name: Audit
+        run: pip-audit --progress-spinner off
