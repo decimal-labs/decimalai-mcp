@@ -51,3 +51,14 @@ Thumbs.db
 # Local agent/tool state
 .claude/settings.local.json
 gitleaks.sarif
+
+# Namespace-auth material. The official `mcp-publisher login dns` flow writes
+# key.pem into the CURRENT directory by default, and that key is the sole proof
+# of ownership for the whole ai.decimal/* namespace — anyone holding it can
+# publish an MCP server under this brand, which runs on other people's machines.
+# The real key lives outside any checkout (~/.secrets/mcp/, chmod 600); these
+# rules exist so that a default-path invocation from inside the repo cannot be
+# committed by accident.
+*.pem
+*.key
+.mcp_publisher_token
