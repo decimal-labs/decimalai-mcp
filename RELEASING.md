@@ -65,12 +65,12 @@ git grep -nF "$V" -- decimalai_mcp/__init__.py decimalai_mcp/api.py server.json
 ## Release steps
 
 ```bash
-# 1. Bump EVERY version site in the table above, commit — all five files:
+# 1. Bump EVERY version site in the table above, commit — four files, five sites:
 #    pyproject.toml:            version = "0.2.0"
 #    decimalai_mcp/__init__.py: __version__ = "0.2.0"
 #    decimalai_mcp/api.py:      User-Agent "decimalai-mcp/0.2.0"
 #    server.json: "version" AND packages[0].version
-#    Then re-run the six-hit grep above.
+#    Then re-run the four-hit grep above.
 
 # 2. Tests green locally, on the pinned mcp.
 pip install -e ".[dev]" && pytest tests/ -v
