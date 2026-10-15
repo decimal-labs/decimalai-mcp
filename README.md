@@ -17,7 +17,7 @@ Gives any MCP client (Claude Desktop, Claude Code, Cursor, …) three read-only 
 | Tool | What it does |
 |---|---|
 | `search_skills(query, category?, sort?, limit?)` | Hybrid keyword/semantic search over the public registry |
-| `get_skill(slug)` | Full record: trust & safety-scan status, verified benchmark lift, SkillScore, ratings, SKILL.md body |
+| `get_skill(slug)` | Full record: trust & safety-scan status, verified benchmark lift, SkillScore, ratings, SKILL.md body, and how to install it (`decimalai skills add <slug>`, the folder it lands in, and the Claude Code `--plugin-dir` line) |
 | `get_leaderboard(sort?, category?, window_days?, limit?)` | Ranked leaderboard: `skill_score`, `biggest_improvement`, `efficiency`, `top_rated` |
 
 **No API key required** — all three tools read public registry endpoints. If you set `DECIMAL_API_KEY` (from [app.decimal.ai/settings](https://app.decimal.ai/settings)), the same tools additionally show which skills your org has already installed (`installed_as`).
