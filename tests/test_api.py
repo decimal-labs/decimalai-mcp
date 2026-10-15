@@ -71,6 +71,16 @@ DETAIL_RESPONSE = {
     "body_markdown": "## When to use\n\nUse this skill for KB questions.",
 }
 
+# The install fields a registry adds to the detail record: the folder the skill
+# installs into, in its two forms, beside the url_slug that `decimalai skills add`
+# takes as its ref. DETAIL_RESPONSE above has none of these keys, which is what
+# an older registry sends.
+INSTALL_FIELDS = {
+    "url_slug": "semantic-search",
+    "install_name": "semantic-search",
+    "install_name_disambiguated": "semantic-search-5d41a2",
+}
+
 LEADERBOARD_RESPONSE = {
     "sort": "biggest_improvement",
     "window_days": 30,
@@ -248,6 +258,193 @@ class TestGetSkill:
         assert len(out) < 9000
 
 
+class TestGetSkillInstall:
+    """get_skill names the folder a skill installs into and the command that installs it."""
+
+    def test_names_the_install_folder_and_the_skills_add_command(self, capture):
+        capture(dict(DETAIL_RESPONSE, **INSTALL_FIELDS))
+        out = api.get_skill("semantic-search")
+        assert "## Install" in out
+        assert "Install name: `semantic-search`" in out
+        assert "`decimalai skills add semantic-search`" in out
+        # The command does not exist before 0.15, so the line says which release has it.
+        assert 'pip install "decimalai>=0.15"' in out
+
+    def test_names_the_fallback_folder_for_a_taken_name(self, capture):
+        """The project can already hold a different skill in that folder.
+
+        The installer then writes the hashed form instead, so "the folder" is only
+        accurate if the fallback is named beside it.
+        """
+        capture(dict(DETAIL_RESPONSE, **INSTALL_FIELDS))
+        out = api.get_skill("semantic-search")
+        assert "`semantic-search-5d41a2`" in out
+
+    @pytest.mark.parametrize("alt", [None, "", "semantic-search"],
+                             ids=["absent", "empty", "same-as-install-name"])
+    def test_no_fallback_clause_when_there_is_no_distinct_fallback(self, capture, alt):
+        capture(dict(DETAIL_RESPONSE, **dict(INSTALL_FIELDS, install_name_disambiguated=alt)))
+        out = api.get_skill("semantic-search")
+        assert "Install name: `semantic-search`" in out
+        assert "already taken" not in out
+
+    def test_tells_claude_code_users_how_to_load_the_installed_skills(self, capture):
+        """`skills add` writes a plugin folder that interactive Claude Code reads only
+        when started with --plugin-dir, so the section says how. One line, and the
+        only place the output names that folder."""
+        capture(dict(DETAIL_RESPONSE, **INSTALL_FIELDS))
+        out = api.get_skill("semantic-search")
+        install = out[out.index("## Install"):out.index("## SKILL.md body")]
+        line = ('- In Claude Code, load the project\'s installed skills with '
+                '`claude --plugin-dir "$(git rev-parse --show-toplevel)/.agents"`.')
+        assert line in install.splitlines()
+        assert out.count(".agents") == 1
+
+    def test_command_takes_the_url_slug_and_the_folder_takes_the_install_name(self, capture):
+        """Two identifiers, not one.
+
+        `url_slug` is the ref the command resolves; it can keep `_` or `.`. The
+        install name is the folder, and loaders refuse those characters in it. A
+        namespaced name is neither: it carries a slash.
+        """
+        capture(dict(DETAIL_RESPONSE, name="acme/pdf_tools", url_slug="acme-pdf_tools",
+                     install_name="acme-pdf-tools",
+                     install_name_disambiguated="acme-pdf-tools-3f9a1c"))
+        out = api.get_skill("acme-pdf_tools")
+        assert "`decimalai skills add acme-pdf_tools`" in out
+        assert "Install name: `acme-pdf-tools`" in out
+        assert "skills add acme/pdf_tools" not in out
+        assert "skills add acme-pdf-tools`" not in out
+
+    def test_command_falls_back_to_the_name_without_url_slug(self, capture):
+        capture(dict(DETAIL_RESPONSE, install_name="semantic-search"))  # no url_slug key
+        out = api.get_skill("semantic-search")
+        assert "`decimalai skills add semantic-search`" in out
+
+    def test_ref_is_shell_quoted(self, capture):
+        """A model may paste this line into a shell, so the ref must stay one argument."""
+        capture(dict(DETAIL_RESPONSE, url_slug="x; touch pwned", install_name="x-touch-pwned"))
+        out = api.get_skill("x")
+        assert "`decimalai skills add 'x; touch pwned'`" in out
+
+    @pytest.mark.parametrize("fields", [{}, {"install_name": None}, {"install_name": ""}],
+                             ids=["key-absent", "null", "empty"])
+    def test_no_install_section_without_an_install_name(self, capture, fields):
+        """No install name, no section: the name is not guessed.
+
+        The folder name is the server's to choose, and a copy of its rules in this
+        package could not be corrected without a release. The rest of the section
+        describes that folder, so it is left out whole rather than half-shown.
+        """
+        capture(dict(DETAIL_RESPONSE, url_slug="semantic-search", **fields))
+        out = api.get_skill("semantic-search")
+        assert "## Install" not in out
+        assert "skills add" not in out
+        assert "--plugin-dir" not in out
+        # The rest of the record is untouched.
+        assert "## SKILL.md body" in out
+        assert "app.decimal.ai/skills/semantic-search" in out
+
+    def test_no_install_section_for_a_blocked_skill(self, capture):
+        """The registry serves a blocked skill's record, install name included, so its
+        verdict is readable. Reading it is not a reason to install it."""
+        capture(dict(DETAIL_RESPONSE, skill_safety="blocked", safety_status="blocked",
+                     **INSTALL_FIELDS))
+        out = api.get_skill("semantic-search")
+        assert "**blocked**" in out          # the verdict is still shown
+        assert "## Install" not in out
+        assert "Install name" not in out
+        assert "skills add" not in out
+        assert "--plugin-dir" not in out
+
+    @pytest.mark.parametrize("fields", [
+        {"withheld": "safety_blocked", "withheld_reason": "safety_blocked"},
+        {"withheld": "intent_rejected", "withheld_reason": "intent_rejected"},
+        # Flagged content is withheld while its band is only "caution".
+        {"withheld": "content_blocked", "withheld_reason": "content_blocked",
+         "skill_safety": "caution", "content_status": "flagged"},
+        {"withheld_reason": "content_blocked"},
+    ], ids=["safety", "intent", "content-flagged", "reason-key-only"])
+    def test_no_install_section_for_a_withheld_skill(self, capture, fields):
+        capture(dict(DETAIL_RESPONSE, **dict(INSTALL_FIELDS, **fields)))
+        out = api.get_skill("semantic-search")
+        assert "## Install" not in out
+        assert "skills add" not in out
+        assert "--plugin-dir" not in out
+
+    def test_no_install_section_while_the_safety_scan_is_flagged(self, capture):
+        """A flagged scan is pending review: the registry refuses public installs of it
+        while its band is only "caution" and it is not withheld from listings."""
+        capture(dict(DETAIL_RESPONSE, skill_safety="caution", safety_status="flagged",
+                     withheld=None, withheld_reason=None, **INSTALL_FIELDS))
+        out = api.get_skill("semantic-search")
+        assert "Scanner: flagged" in out     # the verdict is still shown
+        assert "## Install" not in out
+        assert "skills add" not in out
+        assert "--plugin-dir" not in out
+
+    @pytest.mark.parametrize("fields", [
+        {"skill_safety": "caution", "intent_status": "review"},
+        {"skill_safety": "unreviewed", "safety_status": "unscanned"},
+        {"skill_safety": "passed"},
+    ], ids=["caution-intent-review", "unreviewed", "passed"])
+    def test_install_section_shown_when_nothing_withholds_it(self, capture, fields):
+        """Caution from an intent review still gets it: the installer asks first."""
+        capture(dict(DETAIL_RESPONSE, withheld=None, withheld_reason=None,
+                     **dict(INSTALL_FIELDS, **fields)))
+        out = api.get_skill("semantic-search")
+        assert "`decimalai skills add semantic-search`" in out
+
+    @pytest.mark.parametrize("value", ["absent", None], ids=["key-absent", "null"])
+    def test_missing_safety_status_reads_as_not_flagged(self, capture, value):
+        """The registry's own default for an unset scan status is "unscanned"."""
+        detail = dict(DETAIL_RESPONSE, **INSTALL_FIELDS)
+        if value == "absent":
+            del detail["safety_status"]
+        else:
+            detail["safety_status"] = value
+        capture(detail)
+        out = api.get_skill("semantic-search")
+        assert "`decimalai skills add semantic-search`" in out
+
+    def test_install_section_comes_before_the_body(self, capture):
+        """The body can run to 4000 characters; the install line must not sit behind it."""
+        capture(dict(DETAIL_RESPONSE, **INSTALL_FIELDS))
+        out = api.get_skill("semantic-search")
+        assert out.index("## Install") < out.index("## SKILL.md body")
+
+    def test_steers_away_from_saving_the_body_as_skill_md(self, capture):
+        """The body has no frontmatter; a SKILL.md saved from it does not load."""
+        capture(dict(DETAIL_RESPONSE, **INSTALL_FIELDS))
+        out = api.get_skill("semantic-search")
+        install = out[out.index("## Install"):out.index("## SKILL.md body")]
+        assert "frontmatter" in install
+
+    def test_no_body_means_no_reference_to_one(self, capture):
+        capture(dict(DETAIL_RESPONSE, body_markdown="", **INSTALL_FIELDS))
+        out = api.get_skill("semantic-search")
+        assert "`decimalai skills add semantic-search`" in out
+        assert "## SKILL.md body" not in out
+        assert "body below" not in out
+
+    def test_body_cut_and_notice_are_unchanged(self, capture):
+        """Exactly the first 4000 characters, then the notice, then the web link."""
+        body = "x" * 3999 + "y" + "z" * 6000
+        capture(dict(DETAIL_RESPONSE, body_markdown=body, **INSTALL_FIELDS))
+        out = api.get_skill("semantic-search")
+        assert ("## SKILL.md body\n\n" + "x" * 3999 + "y" + "\n\n… [truncated]\n\nWeb page: "
+                in out)
+        assert "z" * 10 not in out
+        assert "`decimalai skills add semantic-search`" in out
+
+    def test_body_at_the_limit_is_verbatim_without_notice(self, capture):
+        body = "x" * 4000
+        capture(dict(DETAIL_RESPONSE, body_markdown=body, **INSTALL_FIELDS))
+        out = api.get_skill("semantic-search")
+        assert "## SKILL.md body\n\n" + body + "\n\nWeb page: " in out
+        assert "[truncated]" not in out
+
+
 class TestGetLeaderboard:
     def test_default_uses_leaderboard_endpoint(self, capture):
         captured = capture(LEADERBOARD_RESPONSE)
@@ -317,6 +514,18 @@ class TestServerModule:
         doc = srv.get_skill.__doc__ or ""
         assert "url_slug" in doc
         assert "the `name` field from search results" not in doc
+
+    def test_get_skill_tool_docstring_says_it_returns_the_install_command(self):
+        """A model choosing a tool to install a skill reads only this description."""
+        pytest.importorskip("mcp")
+        from decimalai_mcp import server as srv
+
+        doc = srv.get_skill.__doc__ or ""
+        assert "install name" in doc
+        assert "decimalai skills add" in doc
+        # So the model reads a missing Install section as a verdict, not a gap.
+        assert "blocked or withheld" in doc
+        assert "flagged" in doc
 
 
 class TestMainArgv:

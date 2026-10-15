@@ -88,7 +88,11 @@ def search_skills(
 @mcp.tool()
 def get_skill(slug: str) -> str:
     """Get one skill's full record: trust/safety-scan status, verified benchmark
-    evidence (lift vs no-skill baseline), SkillScore, ratings, and the SKILL.md body.
+    evidence (lift vs no-skill baseline), SkillScore, ratings, the SKILL.md body,
+    and how to install it: its install name (the folder it installs into) and the
+    `decimalai skills add <ref>` command that writes that folder. The install part
+    is left out for a skill that is blocked or withheld, or whose safety scan is
+    flagged and awaiting review.
 
     Args:
         slug: The skill's `url_slug` from search results — NOT its `name`. A
@@ -131,7 +135,8 @@ the client closes the stream — so start it from an MCP client, not by hand.
 
 Tools (all read-only, all against the public registry):
   search_skills     search the registry
-  get_skill         one skill's trust/scan status, benchmark evidence, body
+  get_skill         one skill's trust/scan status, benchmark evidence, body,
+                    and its install command
   get_leaderboard   the ranked effectiveness leaderboard
 
 Environment:

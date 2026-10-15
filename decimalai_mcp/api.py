@@ -25,6 +25,7 @@ public-registry surface. See README "Why no manifest-impact tool?".
 from __future__ import annotations
 
 import os
+import shlex
 from typing import Any, Optional
 from urllib.parse import quote
 
@@ -225,6 +226,8 @@ def get_skill(slug: str) -> str:
         lines.append(f"- Already installed in your org as `{skill['installed_as']}`")
 
     body = (skill.get("body_markdown") or "").strip()
+    lines += _install_lines(skill, slug, has_body=bool(body))
+
     if body:
         truncated = body if len(body) <= 4000 else body[:4000] + "\n\n… [truncated]"
         lines += ["", "## SKILL.md body", "", truncated]
@@ -236,6 +239,64 @@ def get_skill(slug: str) -> str:
     lines += ["", "Web page: https://app.decimal.ai/skills/"
               f"{skill.get('url_slug') or skill.get('name') or slug}"]
     return "\n".join(lines)
+
+
+def _install_lines(skill: dict[str, Any], slug: str, has_body: bool) -> list[str]:
+    """The folder a skill installs into, and the command that installs it.
+
+    Two identifiers, deliberately. The command's ref is ``url_slug`` (the name for
+    a registry that sends none), which ``decimalai skills add`` resolves. The
+    folder is ``install_name``: the folder name and the ``name:`` its served
+    SKILL.md declares. It is not the url_slug, which can keep ``_`` or ``.``, and
+    loaders refuse those in ``name:``.
+
+    Empty in two cases:
+
+    * The skill is blocked, withheld from listings, or its safety scan is flagged
+      and awaiting review (which the registry refuses to install publicly even
+      though its band is only "caution"). The registry still serves the record,
+      install name included, so the verdict is readable; nothing here may then
+      recommend installing it. A missing ``safety_status`` reads as not flagged,
+      as the registry's own default for it is "unscanned".
+    * The registry sends no ``install_name``. The folder name is the server's to
+      choose, by rules a copy in this package could drift from with no way to
+      correct it short of a release, and the rest of the section describes that
+      folder, so it is left out whole. An older registry gets exactly the output
+      it always got.
+
+    Receiving ``install_name`` is not taken to mean the registry serves the
+    routes ``skills add`` calls: a registry can send the field before it serves
+    those routes, and nothing here checks for them.
+    """
+    if (
+        skill.get("skill_safety") == "blocked"
+        or skill.get("safety_status") == "flagged"
+        or skill.get("withheld")
+        or skill.get("withheld_reason")
+    ):
+        return []
+    install_name = skill.get("install_name")
+    if not install_name:
+        return []
+    ref = skill.get("url_slug") or skill.get("name") or slug
+    folder = (f"- Install name: `{install_name}` (the folder it installs into, "
+              "and the `name:` its SKILL.md declares")
+    alt = skill.get("install_name_disambiguated")
+    if alt and alt != install_name:
+        # The installer picks this form when the project already holds a
+        # different skill (or an unmanaged folder) under the plain name.
+        folder += f"; `{alt}` if that folder is already taken in the project"
+    command = (f"- `decimalai skills add {shlex.quote(ref)}` "
+               '(decimalai 0.15 or later: `pip install "decimalai>=0.15"`) '
+               "writes that folder with the registry's SKILL.md and pins the version.")
+    if has_body:
+        command += (" Use it instead of saving the body below as SKILL.md: the body "
+                    "has no frontmatter, and may be cut short.")
+    # The command writes a plugin folder, which interactive Claude Code reads only
+    # when started with --plugin-dir. The only place this output names that folder.
+    claude_code = ("- In Claude Code, load the project's installed skills with "
+                   '`claude --plugin-dir "$(git rev-parse --show-toplevel)/.agents"`.')
+    return ["", "## Install", folder + ")", command, claude_code]
 
 
 def get_leaderboard(
