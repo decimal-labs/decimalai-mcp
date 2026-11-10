@@ -140,7 +140,7 @@ class TestSearchSkills:
         assert req.url.params["sort"] == "recommended"
         assert "semantic-search" in out
         assert "(1 of 45)" in out  # total_hint, not the absent "total" key
-        assert "SkillScore 0.85" in out
+        assert "SkillScore 85/100" in out      # the page's scale, not 0..1
         assert "+12.0 pts" in out  # benchmark lift surfaced
 
     def test_no_auth_header_without_api_key(self, capture, monkeypatch):
@@ -296,7 +296,8 @@ class TestGetSkillInstall:
         out = api.get_skill("semantic-search")
         install = out[out.index("## Install"):out.index("## SKILL.md body")]
         line = ('- In Claude Code, load the project\'s installed skills with '
-                '`claude --plugin-dir "$(git rev-parse --show-toplevel)/.agents"`.')
+                '`claude --plugin-dir "$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.agents"` '
+                "(run it from the project's folder).")
         assert line in install.splitlines()
         assert out.count(".agents") == 1
 
@@ -570,3 +571,95 @@ class TestMainArgv:
         monkeypatch.setattr(srv.mcp, "run", lambda: calls.append(1))
         srv.main([])
         assert calls == [1]
+
+
+# ── What the skill's page says, said the same way (2026-11-10 cold walk) ─────
+#
+# A stranger compared this server's output with the skill page and found five things that
+# disagreed: July-era stored counts with no caveat (browser-automation "2/23" where its
+# checks say 23 of 23), "last 30 days" on lifetime stats, a benchmark of an older version
+# shown as current, a "v2" label on a v3 score, and "Installs" for what the page calls Forks.
+
+AUGUST_BENCH = {
+    "verdict": "pass", "total_cases": 23, "passed_cases": 23, "lift_cases": 23,
+    "lift_pass_rate_pct": 100.0, "pass_rate_delta_pts": 69.57, "never_hurt": True,
+    "completed_at": "2026-09-23T05:49:35+00:00",
+}
+JULY_BENCH = {
+    "verdict": "mixed", "total_cases": 23, "passed_cases": 2, "lift_cases": 23,
+    "lift_pass_rate_pct": 8.7, "pass_rate_delta_pts": 4.3, "never_hurt": False,
+    "completed_at": "2026-07-28T10:00:00+00:00",
+}
+
+
+class TestTheSkillPagesNumbers:
+    def test_a_july_benchmark_shows_no_count(self, capture):
+        capture(dict(DETAIL_RESPONSE, benchmark_summary=JULY_BENCH))
+        out = api.get_skill("browser-automation")
+        assert api.PRE_AUGUST_NOTE in out
+        assert "2/23" not in out and "2 of 23" not in out
+        assert "+4.3" not in out
+
+    def test_a_july_benchmark_shows_no_lift_in_search_either(self, capture):
+        item = dict(BROWSE_RESPONSE["items"][0], benchmark_summary=JULY_BENCH)
+        capture(dict(BROWSE_RESPONSE, items=[item]))
+        out = api.search_skills("browser automation")
+        assert "tested before August 2026, no count shown" in out
+        assert "+4.3" not in out
+
+    def test_an_august_or_later_benchmark_reads_like_the_page(self, capture):
+        capture(dict(DETAIL_RESPONSE, benchmark_summary=AUGUST_BENCH))
+        out = api.get_skill("playwright-cli")
+        assert "Passed 23 of 23 test cases with the skill, and 7 of 23 without it (+69.6 pts)." in out
+
+    def test_says_when_the_benchmark_measured_an_older_version(self, capture):
+        capture(dict(DETAIL_RESPONSE, benchmark_summary=AUGUST_BENCH, latest_version_number=5,
+                     benchmark_models=[{"headline": True, "version_number": 4}]))
+        out = api.get_skill("playwright-cli")
+        assert "This benchmark measured v4; the latest version is v5." in out
+
+    def test_no_version_line_when_the_latest_version_was_measured(self, capture):
+        capture(dict(DETAIL_RESPONSE, benchmark_summary=AUGUST_BENCH, latest_version_number=5,
+                     benchmark_models=[{"headline": True, "version_number": 5}]))
+        assert "This benchmark measured" not in api.get_skill("playwright-cli")
+
+    def test_skillscore_has_no_formula_label_and_uses_the_pages_scale(self, capture):
+        capture(DETAIL_RESPONSE)
+        out = api.get_skill("semantic-search")
+        assert "- SkillScore: 85/100" in out
+        assert "v2" not in out.split("## Evidence")[1].split("\n")[1]
+
+    def test_usage_uses_the_pages_words(self, capture):
+        capture(dict(DETAIL_RESPONSE, download_count=85, downloads_since="2026-10-15", fork_count=0,
+                     usage_scope={"total_uses": 12}))
+        out = api.get_skill("semantic-search")
+        assert "Downloads: 85 (since 2026-10-15); Agent runs: 12; rating:" in out
+        assert "Installs:" not in out
+        assert "Forks" not in out       # the page leaves out a zero
+
+
+class TestLeaderboardWindow:
+    def test_the_title_says_what_the_registry_says(self, capture):
+        capture(dict(LEADERBOARD_RESPONSE, usage_scope={"quality_scope": "lifetime"}))
+        out = api.get_leaderboard()
+        assert "## Skills leaderboard — biggest_improvement (lifetime)" in out
+        assert "last 30 days" not in out
+
+    def test_no_window_claim_when_the_registry_names_none(self, capture):
+        capture(LEADERBOARD_RESPONSE)
+        out = api.get_leaderboard()
+        assert "last 30 days" not in out and "days)" not in out
+
+    def test_an_unknown_category_says_what_to_use(self, capture):
+        capture({"items": [], "has_next": False})
+        out = api.get_leaderboard(category="retrieval")
+        assert "No ranked skills in category 'retrieval'" in out
+        assert "documentation" in out
+
+
+class TestSearchHeader:
+    def test_more_results_are_not_reported_as_all(self, capture):
+        capture({"items": BROWSE_RESPONSE["items"], "has_next": True, "next_cursor": "x"})
+        out = api.search_skills("semantic search")
+        assert "(first 1; more match)" in out
+        assert "(1 of 1)" not in out

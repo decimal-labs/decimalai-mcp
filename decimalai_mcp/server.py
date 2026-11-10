@@ -77,8 +77,8 @@ def search_skills(
 
     Args:
         query: Keyword or natural-language query (hybrid keyword/semantic search).
-        category: Optional category filter (e.g. "retrieval", "code-review").
-        sort: recommended (SkillScore v2, default) | lift | popular | top_rated |
+        category: Optional category filter (e.g. "documentation", "code-review").
+        sort: recommended (SkillScore, default) | lift | popular | top_rated |
             efficiency | rating | recent.
         limit: Max results (1-50).
     """
@@ -118,7 +118,7 @@ def get_leaderboard(
         sort: skill_score | biggest_improvement | efficiency | top_rated.
         category: Optional category filter (uses the registry's ranked browse
             view — the dedicated leaderboard endpoint is uncategorized).
-        window_days: Ranking window in days (1-3650; ignored for skill_score).
+        window_days: Kept for older registries. Public stats are lifetime.
         limit: Max entries (1-50).
     """
     return api.get_leaderboard(

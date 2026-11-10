@@ -47,7 +47,7 @@ def _base_url() -> str:
 def _headers() -> dict[str, str]:
     # Keep in step with __version__ / pyproject.toml on every release —
     # see the version table in RELEASING.md.
-    headers = {"User-Agent": "decimalai-mcp/0.1.4"}
+    headers = {"User-Agent": "decimalai-mcp/0.1.5"}
     api_key = os.environ.get("DECIMAL_API_KEY")
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -74,13 +74,41 @@ def _get(path: str, params: Optional[dict[str, Any]] = None) -> Any:
 
 
 def _fmt_score(value: Any) -> str:
-    """SkillScore is 0..1; None means 'New' (no evidence yet)."""
+    """SkillScore out of 100, as the skill's page shows it. The registry sends 0..1; None means no
+    evidence yet."""
     if value is None:
         return "—"
     try:
-        return f"{float(value):.2f}"
+        return f"{round(max(0.0, min(1.0, float(value))) * 100)}/100"
     except (TypeError, ValueError):
         return str(value)
+
+
+# Until this date a benchmark stored a case as failed when no check separated the two runs, even when
+# every check passed, and those counts were never repaired: `browser-automation` stored 2 of 23 where
+# its own checks say 23 of 23. The skill's page corrects them from the run's checks, which these
+# endpoints don't carry, so no count is shown for such a run. The same rule and sentence as the
+# `decimalai skills search` CLI (decimalai 0.28.1, `_COUNTS_FROM_CHECKS_SINCE`).
+_COUNTS_FROM_CHECKS_SINCE = "2026-08-01"
+PRE_AUGUST_NOTE = "Tested before August 2026, when results were counted differently, so no count is shown."
+
+
+def _test_result(bench: Any) -> Optional[str]:
+    """The sentence a skill's page leads with, from the registry's own summary, or None."""
+    if not isinstance(bench, dict) or bench.get("lift_withheld_reason"):
+        return None
+    cases, rate, lift = (bench.get(k) for k in ("lift_cases", "lift_pass_rate_pct", "pass_rate_delta_pts"))
+    if not (isinstance(cases, int) and cases > 0 and isinstance(rate, (int, float))
+            and isinstance(lift, (int, float))):
+        return None
+    completed = bench.get("completed_at")
+    if isinstance(completed, str) and completed < _COUNTS_FROM_CHECKS_SINCE:
+        return PRE_AUGUST_NOTE
+    # Rounds as the page does (half up), so the two never disagree on a count.
+    with_skill = int(rate / 100 * cases + 0.5)
+    without = int((rate - lift) / 100 * cases + 0.5)
+    return (f"Passed {with_skill} of {cases} test cases with the skill, and {without} of {cases} "
+            f"without it ({_fmt_pct(lift, signed=True)} pts).")
 
 
 def _fmt_pct(value: Any, signed: bool = False) -> str:
@@ -120,15 +148,18 @@ def _skill_line(item: dict[str, Any], rank: Optional[int] = None) -> str:
     if score is not None:
         meta.append(f"SkillScore {_fmt_score(score)}")
     bench = item.get("benchmark_summary") or {}
-    if bench.get("pass_rate_delta_pts") is not None:
+    completed = bench.get("completed_at")
+    if isinstance(completed, str) and completed < _COUNTS_FROM_CHECKS_SINCE:
+        meta.append("tested before August 2026, no count shown")
+    elif bench.get("pass_rate_delta_pts") is not None:
         meta.append(f"benchmark lift {_fmt_pct(bench['pass_rate_delta_pts'], signed=True)} pts")
     if item.get("skill_safety"):
         meta.append(f"safety: {item['skill_safety']}")
     if item.get("skill_badge"):
         meta.append(f"badge: {item['skill_badge']}")
-    installs = item.get("install_count")
-    if installs:
-        meta.append(f"{installs} installs")
+    downloads = item.get("download_count")
+    if downloads:
+        meta.append(f"{downloads} downloads")
     if item.get("installed_as"):
         meta.append(f"already installed as `{item['installed_as']}`")
     if meta:
@@ -157,8 +188,14 @@ def search_skills(
     items = data.get("items", [])
     if not items:
         return f"No public skills matched {query!r}."
-    total = data.get("total_hint") or data.get("total") or len(items)
-    lines = [f"## Registry results for {query!r} ({len(items)} of {total})", ""]
+    total = data.get("total_hint") or data.get("total")
+    if total:
+        shown = f"{len(items)} of {total}"
+    elif data.get("has_next"):
+        shown = f"first {len(items)}; more match"
+    else:
+        shown = f"{len(items)}"
+    lines = [f"## Registry results for {query!r} ({shown})", ""]
     lines += [_skill_line(item) for item in items]
     lines += ["", "Use `get_skill(<url_slug>)` for trust/scan status, benchmark evidence, and the "
               "skill body — the slug shown above where it differs from the name, otherwise the name itself."]
@@ -202,17 +239,21 @@ def get_skill(slug: str) -> str:
         lines.append(f"- Badge: {skill['skill_badge']}")
 
     lines += ["", "## Evidence"]
-    lines.append(f"- SkillScore (v2, evidence-tiered): {_fmt_score(eff.get('skill_score'))}")
+    lines.append(f"- SkillScore: {_fmt_score(eff.get('skill_score'))}")
     if eff.get("avg_pass_rate") is not None:
         lines.append(f"- Live pass rate: {_fmt_pct(100 * float(eff['avg_pass_rate']))}%")
     if bench:
-        lines.append(
-            f"- Latest verified benchmark: verdict **{bench.get('verdict', '?')}**, "
-            f"lift {_fmt_pct(bench.get('pass_rate_delta_pts'), signed=True)} pts "
-            f"({bench.get('passed_cases', '?')}/{bench.get('total_cases', '?')} cases)"
-        )
-        if bench.get("never_hurt") is not None:
-            lines.append(f"- Never-hurt (zero regressed cases): {bench['never_hurt']}")
+        result = _test_result(bench)
+        if result == PRE_AUGUST_NOTE:
+            lines.append(f"- Latest verified benchmark: {result}")
+        else:
+            lines.append(f"- Latest verified benchmark: verdict **{bench.get('verdict', '?')}**. "
+                         + (result or f"Lift {_fmt_pct(bench.get('pass_rate_delta_pts'), signed=True)} pts."))
+            if bench.get("never_hurt") is not None:
+                lines.append(f"- Never-hurt (zero regressed cases): {bench['never_hurt']}")
+        measured = _measured_version(skill)
+        if measured:
+            lines.append(f"- {measured}")
     history = skill.get("verification_history") or []
     if history:
         latest = history[0]
@@ -220,7 +261,7 @@ def get_skill(slug: str) -> str:
             f"- Last re-verified: {latest.get('verified_at', '?')} "
             f"({latest.get('verification_method', 'verified')} on {latest.get('runner_model', '?')})"
         )
-    lines.append(f"- Installs: {skill.get('install_count', 0)}; "
+    lines.append(f"- {_usage_line(skill)}; "
                  f"rating: {skill.get('avg_rating') or '—'} ({skill.get('rating_count', 0)} ratings)")
     if skill.get("installed_as"):
         lines.append(f"- Already installed in your org as `{skill['installed_as']}`")
@@ -295,8 +336,38 @@ def _install_lines(skill: dict[str, Any], slug: str, has_body: bool) -> list[str
     # The command writes a plugin folder, which interactive Claude Code reads only
     # when started with --plugin-dir. The only place this output names that folder.
     claude_code = ("- In Claude Code, load the project's installed skills with "
-                   '`claude --plugin-dir "$(git rev-parse --show-toplevel)/.agents"`.')
+                   '`claude --plugin-dir "$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.agents"` '
+                   "(run it from the project's folder).")
     return ["", "## Install", folder + ")", command, claude_code]
+
+
+def _measured_version(skill: dict[str, Any]) -> Optional[str]:
+    """Which version the headline benchmark measured, when it is not the latest one."""
+    latest = skill.get("latest_version_number")
+    headline = next((m for m in (skill.get("benchmark_models") or [])
+                     if isinstance(m, dict) and m.get("headline")), None)
+    measured = (headline or {}).get("version_number")
+    if isinstance(latest, int) and isinstance(measured, int) and measured != latest:
+        return f"This benchmark measured v{measured}; the latest version is v{latest}."
+    return None
+
+
+def _usage_line(skill: dict[str, Any]) -> str:
+    """The skill page's track record, in its words: downloads, agent runs, forks."""
+    scope = skill.get("usage_scope") or {}
+    runs = (scope.get("total_uses") if scope.get("total_uses") is not None
+            else skill.get("cumulative_recorded_uses") or scope.get("cumulative_recorded_uses")
+            or skill.get("total_uses") or 0)
+    parts = []
+    downloads = skill.get("download_count") or 0
+    if downloads:
+        since = skill.get("downloads_since")
+        parts.append(f"Downloads: {downloads}" + (f" (since {since})" if since else ""))
+    parts.append(f"Agent runs: {runs}")
+    forks = skill.get("fork_count") or 0
+    if forks:
+        parts.append(f"Forks: {forks}")
+    return "; ".join(parts)
 
 
 def get_leaderboard(
@@ -332,9 +403,14 @@ def get_leaderboard(
             params={"sort": sort, "window_days": window_days, "limit": limit},
         )
         items = data.get("items", [])
-        title = f"## Skills leaderboard — {sort} (last {window_days} days)"
+        scope = (data.get("usage_scope") or {}).get("quality_scope")
+        title = f"## Skills leaderboard — {sort}" + (f" ({scope})" if scope else "")
 
     if not items:
+        if category:
+            return (f"No ranked skills in category {category!r}. Category names are the ones the "
+                    "registry's filters show, in lower case, e.g. 'documentation' or 'code-review': "
+                    "https://app.decimal.ai/skills")
         return "The leaderboard returned no entries for these filters."
     lines = [title, ""]
     lines += [_skill_line(item, rank=i + 1) for i, item in enumerate(items)]
