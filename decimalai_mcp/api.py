@@ -376,35 +376,28 @@ def get_leaderboard(
     window_days: int = 30,
     limit: int = 10,
 ) -> str:
-    """Ranked skills leaderboard.
-
-    Without ``category``: the dedicated public leaderboard endpoint
+    """Ranked skills leaderboard, from the public leaderboard endpoint
     (axes: skill_score | biggest_improvement | efficiency | top_rated).
-    With ``category``: the leaderboard endpoint does not support category
-    filtering server-side, so we fall back to the registry browse endpoint
-    in its documented ranked view (``view=ranks``) filtered by category.
+
+    ``category`` narrows every axis to one category and re-ranks inside it; the
+    endpoint does that itself. Until 2026-11-10 a category went to the registry
+    browse endpoint instead, with the leaderboard's sort name, which browse
+    doesn't take: `category=data, sort=skill_score` was a raw 400.
     """
     limit = max(1, min(int(limit), 50))
+    if sort not in _LEADERBOARD_SORTS:
+        return (
+            f"Unsupported sort {sort!r}. The public leaderboard supports: "
+            + ", ".join(sorted(_LEADERBOARD_SORTS))
+        )
+    params = {"sort": sort, "window_days": window_days, "limit": limit}
     if category:
-        data = _get(
-            "/api/v1/registry/skills",
-            params={"category": category, "sort": sort, "view": "ranks", "limit": limit},
-        )
-        items = data.get("items", [])
-        title = f"## Top skills in category {category!r} (sorted by {sort})"
-    else:
-        if sort not in _LEADERBOARD_SORTS:
-            return (
-                f"Unsupported sort {sort!r}. The public leaderboard supports: "
-                + ", ".join(sorted(_LEADERBOARD_SORTS))
-            )
-        data = _get(
-            "/api/v1/registry/leaderboard",
-            params={"sort": sort, "window_days": window_days, "limit": limit},
-        )
-        items = data.get("items", [])
-        scope = (data.get("usage_scope") or {}).get("quality_scope")
-        title = f"## Skills leaderboard — {sort}" + (f" ({scope})" if scope else "")
+        params["category"] = category
+    data = _get("/api/v1/registry/leaderboard", params=params)
+    items = data.get("items", [])
+    scope = (data.get("usage_scope") or {}).get("quality_scope")
+    title = (f"## Skills leaderboard — {sort}" + (f" in {category!r}" if category else "")
+             + (f" ({scope})" if scope else ""))
 
     if not items:
         if category:

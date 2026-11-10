@@ -457,13 +457,20 @@ class TestGetLeaderboard:
         assert "1. **sql-analyst**" in out
         assert "+66 pts pass rate" in out
 
-    def test_category_falls_back_to_ranked_browse(self, capture):
-        captured = capture(BROWSE_RESPONSE)
-        api.get_leaderboard(category="retrieval", sort="skill_score")
+    def test_a_category_is_ranked_by_the_leaderboard_itself(self, capture):
+        """It went to browse with the leaderboard's sort name, which browse refuses (400)."""
+        captured = capture(LEADERBOARD_RESPONSE)
+        out = api.get_leaderboard(category="retrieval", sort="skill_score")
         req = captured[0]
-        assert req.url.path == "/api/v1/registry/skills"
-        assert req.url.params["view"] == "ranks"
+        assert req.url.path == "/api/v1/registry/leaderboard"
         assert req.url.params["category"] == "retrieval"
+        assert req.url.params["sort"] == "skill_score"
+        assert "## Skills leaderboard — skill_score in 'retrieval'" in out
+
+    def test_a_category_with_an_unknown_sort_is_refused_before_the_network(self, capture):
+        captured = capture(LEADERBOARD_RESPONSE)
+        assert "Unsupported sort" in api.get_leaderboard(category="retrieval", sort="installs")
+        assert not captured
 
     def test_invalid_sort_rejected_client_side(self, capture):
         captured = capture(LEADERBOARD_RESPONSE)
