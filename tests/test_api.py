@@ -619,6 +619,21 @@ class TestTheSkillPagesNumbers:
         out = api.get_skill("playwright-cli")
         assert "Passed 23 of 23 test cases with the skill, and 7 of 23 without it (+69.6 pts)." in out
 
+    def test_a_rate_paired_with_the_wrong_count_prints_rates_not_counts(self, capture):
+        # open-gsd-gsd-workspace as the registry sent it before 2026-11-11: 12 and 5 of 23,
+        # paired with the 16 comparable cases. Multiplying printed "8 of 16 ... 3 of 16".
+        bench = dict(AUGUST_BENCH, lift_cases=16, lift_pass_rate_pct=52.2, pass_rate_delta_pts=30.43)
+        capture(dict(DETAIL_RESPONSE, benchmark_summary=bench))
+        out = api.get_skill("open-gsd-gsd-workspace")
+        assert "8 of 16" not in out and "3 of 16" not in out
+        assert "Passed 52.2% of its test cases with the skill, and 21.8% without it (+30.4 pts)." in out
+
+    def test_the_fixed_pairing_prints_the_real_counts(self, capture):
+        bench = dict(AUGUST_BENCH, lift_cases=23, lift_pass_rate_pct=52.2, pass_rate_delta_pts=30.43)
+        capture(dict(DETAIL_RESPONSE, benchmark_summary=bench))
+        out = api.get_skill("open-gsd-gsd-workspace")
+        assert "Passed 12 of 23 test cases with the skill, and 5 of 23 without it (+30.4 pts)." in out
+
     def test_says_when_the_benchmark_measured_an_older_version(self, capture):
         capture(dict(DETAIL_RESPONSE, benchmark_summary=AUGUST_BENCH, latest_version_number=5,
                      benchmark_models=[{"headline": True, "version_number": 4}]))
